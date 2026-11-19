@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hill-Agri AI | Smart Cultivation Dashboard</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; }
+    .container { max-width: 1100px; margin: auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 24px; }
+    .badge { background: #065f46; color: #6ee7b7; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 18px; }
+    .card h3 { margin: 0 0 8px 0; font-size: 14px; color: #94a3b8; text-transform: uppercase; }
+    .metric { font-size: 28px; font-weight: 700; color: #38bdf8; }
+    button { background: #10b981; color: #064e3b; border: none; padding: 12px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px; }
+    button:hover { background: #34d399; }
+    button.secondary { background: #3b82f6; color: white; margin-left: 8px; }
+    table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden; }
+    th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #334155; font-size: 14px; }
+    th { background: #0f172a; color: #94a3b8; }
+    .on { color: #34d399; font-weight: 700; }
+    .off { color: #fbbf24; font-weight: 600; }
+    .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+    input { background: #0f172a; border: 1px solid #475569; color: white; padding: 8px 10px; border-radius: 6px; width: 90px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <h1 style="margin:0;">Smart Agriculture for Hilly Regions</h1>
+      <p style="margin:4px 0 0 0; color:#94a3b8;">Edge-to-Cloud IoT, LoRa Telemetry & ML Terrace Irrigation System</p>
+    </div>
+    <span class="badge">LoRa Gateway: ONLINE</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Total Water Saved</h3>
+      <div class="metric" id="waterSaved">0 L</div>
+    </div>
+    <div class="card">
+      <h3>Active Slope Zones</h3>
+      <div class="metric">3 Terraces</div>
+    </div>
+    <div class="card">
+      <h3>ML Model Engine</h3>
+      <div class="metric" style="color:#a78bfa;">Random Forest</div>
+    </div>
+    <div class="card">
+      <h3>Leaf Disease Screen</h3>
+      <div id="diseaseBox" style="font-size:14px; color:#e2e8f0;">Click scan to run CV check</div>
+    </div>
+  </div>
+
+  <div class="controls card">
+    <button onclick="simulateNodes()">Simulate 3 Terrace Nodes (LoRa Packet)</button>
+    <button class="secondary" onclick="runDiseaseCheck()">Test Leaf Disease AI</button>
+    <span style="margin-left:auto; font-size:13px; color:#94a3b8;">Manual Test — Moisture %: <input id="mVal" type="number" value="22" /> Rain (mm): <input id="rVal" type="number" value="0" /></span>
+    <button onclick="sendManual()">Send Reading</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Zone (Slope)</th>
+        <th>Moisture</th>
+        <th>Rain Forecast</th>
+        <th>Valve Action</th>
+        <th>AI Confidence</th>
+        <th>System Advisory</th>
+      </tr>
+    </thead>
+    <tbody id="logBody"></tbody>
+  </table>
+</div>
+
+<script>
+  async function loadDashboard() {
+    const res = await fetch('/api/dashboard-data');
+    const data = await res.json();
+    document.getElementById('waterSaved').innerText = data.total_water_saved_liters + ' L';
+    const tbody = document.getElementById('logBody');
+    tbody.innerHTML = data.records.map(r => `
+      <tr>
+        <td><strong>${r.zone_id}</strong> (${r.slope_deg}°)</td>
+        <td>${r.soil_moisture}%</td>
+        <td>${r.rain_forecast_mm} mm</td>
+        <td class="${r.irrigate ? 'on' : 'off'}">${r.irrigate ? 'IRRIGATE (OPEN)' : 'HOLD (CLOSED)'}</td>
+        <td>${r.confidence}%</td>
+        <td>${r.advisory}</td>
+      </tr>
+    `).join('');
+  }
+
+  async function simulateNodes() {
+    await fetch('/api/simulate', { method: 'POST' });
+    loadDashboard();
+  }
+
+  async function sendManual() {
+    await fetch('/api/telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        zone_id: 'Terrace-Upper-01',
+        elevation_tier: 3,
+        slope_deg: 28.0,
+        soil_moisture: parseFloat(document.getElementById('mVal').value),
+        rain_forecast_mm: parseFloat(document.getElementById('rVal').value)
+      })
+    });
+    loadDashboard();
+  }
+
+  async function runDiseaseCheck() {
+    const res = await fetch('/api/disease-check?leaf_spot_ratio=0.45&yellowing_index=0.38', { method: 'POST' });
+    const d = await res.json();
+    document.getElementById('diseaseBox').innerHTML = `<strong style="color:#f87171;">${d.diagnosis} (${d.risk_score}%)</strong><br><small>${d.recommendation}</small>`;
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>
